@@ -1,20 +1,54 @@
+terraform {
+  required_version = ">= 0.12, < 0.13"
+}
+
+
 provider "aws" {
   region = "us-east-2"
+
+  version = "~> 2.0"
 }
 
-variable "server_port" {
-  description = "The port the server will use for HTTP requests"
-  type        = number
-  default     = 8080
-}
 
-data "aws_vpc" {
+
+data "aws_vpc" "default" {
   default = true
 
 }
 
-data "aws_subnet_ids" {
+data "aws_subnet_ids" "default" {
   vpc_id = data.aws_vpc.default.id
+}
+
+resource "aws_s3_bucket" "terraform-state" {
+  bucket = "ryans-tfstate"
+
+  lifecycle {
+    prevent_destroy = false
+  }
+
+  versioning {
+    enabled = true
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+}
+
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = "tf-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
 }
 
 resource "aws_security_group" "instance" {
@@ -29,12 +63,12 @@ resource "aws_security_group" "instance" {
 
 }
 resource "aws_security_group" "alb" {
-  name = tf-example
+  name = var.alb_security_group_name
 
   ingress {
     from_port   = 80
     to_port     = 80
-    protocol    = "http"
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -48,7 +82,7 @@ resource "aws_security_group" "alb" {
 }
 
 
-resource "aws_instance" "single" {
+resource "aws_launch_configuration" "asg" {
   image_id        = "ami-0c55b159cbfafe1f0"
   instance_type   = "t2.micro"
   security_groups = [aws_security_group.instance.id]
@@ -56,18 +90,16 @@ resource "aws_instance" "single" {
   user_data = <<-EOF
               #!/bin/bash
               echo "Hello, World" > index.html
-              nohup busybox httpd -f -p {var.server_port} &
+              nohup busybox httpd -f -p ${var.server_port} &
               EOF
   lifecycle {
     create_before_destroy = true
   }
 
-  tags = {
-    Name = "example"
-  }
+
 }
 
-resource "aws_launch_configuration" "asg" {
+resource "aws_autoscaling_group" "asg" {
   launch_configuration = aws_launch_configuration.asg.name
   vpc_zone_identifier  = data.aws_subnet_ids.default.ids
 
@@ -84,8 +116,8 @@ resource "aws_launch_configuration" "asg" {
 }
 
 resource "aws_lb" "example" {
-  name               = "terraform-asg-example"
-  load_balancer_type = application
+  name               = var.alb_name
+  load_balancer_type = "application"
   subnets            = data.aws_subnet_ids.default.ids
   security_groups    = [aws_security_group.alb.id]
 }
@@ -93,7 +125,7 @@ resource "aws_lb" "example" {
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.example.arn
   port              = 80
-  protocol          = "http"
+  protocol          = "HTTP"
 
   default_action {
     type = "fixed-response"
@@ -101,15 +133,15 @@ resource "aws_lb_listener" "http" {
     fixed_response {
       content_type = "text/plain"
       message_body = "404: page not found"
-      status_code  = "404"
+      status_code  = 404
     }
   }
 }
 
 resource "aws_lb_target_group" "asg" {
-  name     = "tf-asg"
-  port     = va.server_port
-  protocol = "http"
+  name     = var.alb_name
+  port     = var.server_port
+  protocol = "HTTP"
   vpc_id   = data.aws_vpc.default.id
 
   health_check {
@@ -124,7 +156,17 @@ resource "aws_lb_target_group" "asg" {
 
 }
 
-output "alb_dns_name" {
-  value       = aws_lb.example.dns_name
-  description = "The domain name of the load balancer"
+resource "aws_lb_listener_rule" "asg" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  condition {
+    field  = "path-pattern"
+    values = ["*"]
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.asg.arn
+  }
 }
