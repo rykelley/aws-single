@@ -1,4 +1,4 @@
-backend {
+terraform {
   backend "s3" {
     bucket = "ryans-tfstate"
     key    = "global/s3/terraform.tfstate"
