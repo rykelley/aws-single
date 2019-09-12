@@ -4,7 +4,7 @@ provider "aws" {
 }
 
 
-module "webserver-cluster" {
+module "webserver_cluster" {
   source = "../../../modules/services/webserver-cluster"
 }
 

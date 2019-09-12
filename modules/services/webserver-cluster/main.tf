@@ -26,8 +26,8 @@ data "terraform_remote_state" "db" {
   backend = "s3"
 
   config = {
-    bucket = db_remote_state_bucket
-    key    = db_remote_state_key
+    bucket = var.db_remote_state_bucket
+    key    = var.db_remote_state_key
     region = var.region
   }
 }
@@ -74,7 +74,7 @@ resource "aws_security_group_rule" "allow_all_outbound" {
   from_port   = local.any_port
   to_port     = local.any_port
   protocol    = local.any_protocol
-  cidr_blocks = local.any_protocol
+  cidr_blocks = local.all_ips
 }
 
 

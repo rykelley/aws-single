@@ -4,7 +4,7 @@ output "alb_dns_name" {
 }
 
 output "asg_name" {
-  value       = aws_autoscaling_group.example.name
+  value       = aws_autoscaling_group.asg.name
   description = "Name of the ASG"
 }
 

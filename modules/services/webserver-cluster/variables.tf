@@ -1,7 +1,6 @@
 variable "alb_name" {
   description = "The name of the ALB"
   type        = string
-
 }
 
 variable "server_port" {
