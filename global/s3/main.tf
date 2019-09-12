@@ -1,4 +1,18 @@
-resource "aws_s3_bucket" "terraform-state" {
+terraform {
+  required_version = ">= 0.12, < 0.13"
+}
+
+
+provider "aws" {
+  region = "us-east-2"
+
+  version = "~> 2.0"
+}
+
+
+
+
+resource "aws_s3_bucket" "terraform_state" {
   bucket = "ryans-tfstate"
 
   lifecycle {
