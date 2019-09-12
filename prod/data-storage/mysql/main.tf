@@ -3,11 +3,11 @@ provider "aws" {
 }
 
 resource "aws_db_instance" "example" {
-  identifier_prefix = "customer-mysql"
+  identifier_prefix = "tf-mysql"
   engine            = "mysql"
   allocated_storage = 10
   instance_class    = "db.t2.micro"
-  name              = "pims"
+  name              = "test_database"
   username          = "admin"
 
   password            = "password1234" #data.aws_secretsmanager_secret_version.db_password.secret_string

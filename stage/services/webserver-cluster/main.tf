@@ -1,157 +1,20 @@
-terraform {
-  required_version = ">= 0.12, < 0.13"
-}
-
-
 provider "aws" {
-  region = "us-east-2"
-
-  version = "~> 2.0"
-}
-
-
-
-data "aws_vpc" "default" {
-  default = true
-
-}
-
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
-}
-
-data "terraform_remote_state" "db" {
-  backend = "s3"
-
-  config = {
-    bucket = "ryans-tfstate"
-    key    = "stage/data-storage/mysql/terraform.tfstate"
-    region = "us-east-2"
-  }
-}
-
-data "template_file" "user_data" {
-  template = file("user-data.sh")
-
-  vars = {
-    server_port = var.server_port
-    db_address  = data.terraform_remote_state.db.outputs.address
-    db_port     = data.terraform_remote_state.db.outputs.port
-  }
-}
-
-resource "aws_security_group" "instance" {
-  name = "tf-webserver-instance"
-
-  ingress {
-    from_port   = var.server_port
-    to_port     = var.server_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-}
-resource "aws_security_group" "alb" {
-  name = var.alb_security_group_name
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  region = var.region
 
 }
 
 
-resource "aws_launch_configuration" "asg" {
-  image_id        = "ami-0c55b159cbfafe1f0"
-  instance_type   = "t2.micro"
-  security_groups = [aws_security_group.instance.id]
-  user_data       = data.template_file.user_data.rendered
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-
+module "webserver-cluster" {
+  source = "../../../modules/services/webserver-cluster"
 }
 
-resource "aws_autoscaling_group" "asg" {
-  launch_configuration = aws_launch_configuration.asg.name
-  vpc_zone_identifier  = data.aws_subnet_ids.default.ids
-
-  target_group_arns = [aws_lb_target_group.asg.arn]
-  health_check_type = "ELB"
-
-  min_size = 2
-  max_size = 10
-  tag {
-    key                 = "Name"
-    value               = "tf-asg-example"
-    propagate_at_launch = true
-  }
-}
-
-resource "aws_lb" "example" {
-  name               = var.alb_name
-  load_balancer_type = "application"
-  subnets            = data.aws_subnet_ids.default.ids
-  security_groups    = [aws_security_group.alb.id]
-}
-
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.example.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "fixed-response"
-
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "404: page not found"
-      status_code  = 404
-    }
-  }
-}
-
-resource "aws_lb_target_group" "asg" {
-  name     = var.alb_name
-  port     = var.server_port
-  protocol = "HTTP"
-  vpc_id   = data.aws_vpc.default.id
-
-  health_check {
-    path                = "/"
-    protocol            = "HTTP"
-    matcher             = "200"
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 3
-    interval            = 15
-  }
-
-}
-
-resource "aws_lb_listener_rule" "asg" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
-
-  condition {
-    field  = "path-pattern"
-    values = ["*"]
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.asg.arn
-  }
-}
+region                  = "us-east-2"
+cluster_name            = "webserver-sandbox"
+db_remote_state_bucket  = "ryans-tfstate"
+db_remote_state_key     = "stage/data-storage/mysql/terraform.tfstate"
+alb_name                = "customers-sandbox-alb"
+alb_security_group_name = "customers-alb-sec-group"
+image_id                = "ami-05c1fa8df71875112"
+instance_type           = "t2.micro"
+min_size                = 2
+max_size                = 4
