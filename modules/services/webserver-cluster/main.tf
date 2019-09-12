@@ -88,7 +88,7 @@ resource "aws_launch_configuration" "asg" {
     create_before_destroy = true
   }
 
-
+  # below is an asg
 }
 
 resource "aws_autoscaling_group" "asg" {
@@ -106,6 +106,9 @@ resource "aws_autoscaling_group" "asg" {
     propagate_at_launch = true
   }
 }
+
+# https://www.terraform.io/docs/providers/aws/r/lb.html
+# this is where we build our Application load balancer
 
 resource "aws_lb" "example" {
   name               = var.alb_name
