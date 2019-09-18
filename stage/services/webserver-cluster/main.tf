@@ -17,4 +17,11 @@ module "webserver_cluster" {
   instance_type           = "t2.micro"
   min_size                = 2
   max_size                = 4
+  enable_autoscaling      = false
+  server_text             = "New server text"
+
+  custom_tags = {
+    Owner      = "Hosting"
+    DepolyedBy = "terraform"
+  }
 }
